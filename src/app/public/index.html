@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Realtime Chat — Two-Hop Demo</title>
+  <style>
+    :root {
+      --bg:#0e1116; --panel:#161b22; --panel2:#1c222b; --border:#2a313c; --text:#e6edf3;
+      --muted:#8b949e; --accent:#1f6feb; --me:#1f6feb; --them:#242c38; --green:#3fb950; --blue:#58a6ff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --border:#d0d7de; --text:#1f2328;
+        --muted:#656d76; --accent:#0969da; --me:#0969da; --them:#eaeef2; --green:#1a7f37; --blue:#0969da; }
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;height:100vh;display:flex;flex-direction:column}
+    header{padding:12px 20px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:12px}
+    header h1{margin:0;font-size:15px}
+    header .status{margin-left:auto;font-size:12px;color:var(--muted)}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px}
+    .dot.off{background:var(--muted)}
+    #join{margin:auto;text-align:center;padding:40px}
+    #join input{font-size:16px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
+    #join button{font-size:16px;padding:10px 20px;margin-left:8px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer}
+    #app{display:none;flex:1;overflow:hidden;grid-template-columns:200px 1fr;gap:0}
+    #app.on{display:grid}
+    #roster{border-right:1px solid var(--border);background:var(--panel);padding:14px;overflow:auto}
+    #roster h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 10px}
+    #roster li{list-style:none;padding:5px 0;display:flex;align-items:center;gap:7px}
+    #roster ul{margin:0;padding:0}
+    .main{display:flex;flex-direction:column;overflow:hidden}
+    #messages{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+    .msg{max-width:70%;padding:8px 12px;border-radius:14px;background:var(--them);align-self:flex-start}
+    .msg.mine{background:var(--me);color:#fff;align-self:flex-end}
+    .msg .meta{font-size:11px;opacity:.7;margin-bottom:2px}
+    .msg .receipt{font-size:11px;opacity:.85;margin-top:3px;text-align:right}
+    .composer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);background:var(--panel)}
+    .composer input{flex:1;padding:10px 14px;border-radius:20px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font:inherit}
+    .composer button{padding:10px 18px;border-radius:20px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:600}
+    .seq{font-variant-numeric:tabular-nums;opacity:.5}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💬 Realtime Chat</h1>
+    <span style="font-size:12px;color:var(--muted)">two-hop routing · ordering · presence · receipts</span>
+    <span class="status" id="status"><span class="dot off"></span>connecting…</span>
+  </header>
+
+  <div id="join">
+    <h2>Pick a name and open this page in a few tabs</h2>
+    <input id="name" placeholder="your name" autofocus />
+    <button id="joinBtn">Join lobby</button>
+  </div>
+
+  <div id="app">
+    <aside id="roster"><h2>Online</h2><ul id="users"></ul></aside>
+    <div class="main">
+      <div id="messages"></div>
+      <div class="composer">
+        <input id="text" placeholder="Type a message…" autocomplete="off" />
+        <button id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let ws, me = "", lastSeq = 0;
+    const receipts = {}; // seq -> {delivered:Set, read:Set} for my own messages
+    const seqEls = {};   // seq -> receipt element
+
+    function connect() {
+      ws = new WebSocket(`ws://${location.host}`);
+      ws.onopen = () => {
+        $("status").innerHTML = '<span class="dot"></span>connected';
+        ws.send(JSON.stringify({ type: "join", name: me, cursor: lastSeq })); // Phase 6 cursor
+      };
+      ws.onclose = () => {
+        $("status").innerHTML = '<span class="dot off"></span>reconnecting…';
+        // Phase 6: jittered reconnect so a whole fleet doesn't stampede.
+        setTimeout(connect, 500 + Math.random() * 2000);
+      };
+      ws.onmessage = (ev) => handle(JSON.parse(ev.data));
+    }
+
+    function handle(m) {
+      if (m.type === "roster") {
+        $("users").innerHTML = m.users.map((u) =>
+          `<li><span class="dot"></span>${u}${u === me ? " (you)" : ""}</li>`).join("");
+      }
+      if (m.type === "message") {
+        renderMessage(m);
+        lastSeq = Math.max(lastSeq, m.seq);
+        if (m.from !== me) {
+          ws.send(JSON.stringify({ type: "delivered", seq: m.seq }));       // Phase 4
+          if (document.hasFocus()) ws.send(JSON.stringify({ type: "read", seq: m.seq }));
+        }
+      }
+      if (m.type === "receipt") updateReceipt(m); // {seq, by, kind}
+    }
+
+    function renderMessage(m) {
+      const mine = m.from === me;
+      const el = document.createElement("div");
+      el.className = "msg" + (mine ? " mine" : "");
+      el.innerHTML = `<div class="meta"><span class="seq">#${m.seq}</span> ${mine ? "you" : escapeHtml(m.from)}</div>`
+        + `<div>${escapeHtml(m.text)}</div>`
+        + (mine ? `<div class="receipt" id="r${m.seq}">✓ sent</div>` : "");
+      $("messages").appendChild(el);
+      $("messages").scrollTop = $("messages").scrollHeight;
+      if (mine) { receipts[m.seq] = { delivered: new Set(), read: new Set() }; seqEls[m.seq] = $("r" + m.seq); }
+    }
+
+    function updateReceipt(m) {
+      const r = receipts[m.seq];
+      if (!r || !seqEls[m.seq]) return; // not my message
+      if (m.by && m.by !== me) r[m.kind].add(m.by);
+      const d = r.delivered.size, rd = r.read.size;
+      seqEls[m.seq].textContent = rd > 0 ? `✓✓ read by ${rd}` : d > 0 ? `✓✓ delivered to ${d}` : "✓ sent";
+      if (rd > 0) seqEls[m.seq].style.color = "var(--blue)";
+    }
+
+    function sendMsg() {
+      const t = $("text").value.trim();
+      if (!t) return;
+      ws.send(JSON.stringify({ type: "chat", text: t }));
+      $("text").value = "";
+    }
+
+    // When the window regains focus, mark visible messages read.
+    window.addEventListener("focus", () => {
+      for (let s = Math.max(1, lastSeq - 20); s <= lastSeq; s++)
+        ws?.readyState === 1 && ws.send(JSON.stringify({ type: "read", seq: s }));
+    });
+
+    const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    $("joinBtn").onclick = () => {
+      me = $("name").value.trim() || "anon";
+      $("join").style.display = "none";
+      $("app").classList.add("on");
+      connect();
+    };
+    $("name").addEventListener("keydown", (e) => e.key === "Enter" && $("joinBtn").click());
+    $("sendBtn").onclick = sendMsg;
+    $("text").addEventListener("keydown", (e) => e.key === "Enter" && sendMsg());
+  </script>
+</body>
+</html>

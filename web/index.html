@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Real-Time — Realtime Lab</title>
+<meta name="description" content="An interactive lab for real-time / chat infrastructure: transports, the two-hop routing problem, C10M capacity, ordering, receipts, group fan-out, push notifications, E2E encryption, presence, offline sync, backpressure, and the reconnect storm." />
+<meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0d0d13" media="(prefers-color-scheme: dark)" />
+<link rel="preload" href="fonts/space-grotesk-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+<style>
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/space-grotesk-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/space-grotesk-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:700; font-display:swap; src:url(fonts/space-grotesk-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2"); }
+  :root {
+    --bg:#faf9f6; --panel:#ffffff; --panel-2:#f4f2ec; --sidebar-bg:#f4f2ec; --hover:#ebe9e1;
+    --ink:#191a20; --muted:#6c6d78; --line:#e7e3da;
+    --accent:#7c3aed; --accent-soft:#efe9fe; --amber:#b96608; --amber-soft:#fbeed6;
+    --good:#0f9d6a; --good-soft:#e0f2ea; --warn:#b96608; --warn-soft:#fbeed6; --bad:#dd4650; --bad-soft:#fbe4e6; --info:#2f6db0;
+    --grid:#d7dbd2;
+    --shadow:0 1px 2px rgba(24,20,40,.04), 0 10px 30px -16px rgba(24,20,40,.18);
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans:"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --display:"Space Grotesk", var(--sans);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d0d13; --panel:#16161e; --panel-2:#1d1d27; --sidebar-bg:#0a0a10; --hover:#20202c;
+      --ink:#ecebf2; --muted:#9698a6; --line:#282833;
+      --accent:#a78bfa; --accent-soft:#221a3a; --amber:#f0b45a; --amber-soft:#2a2216;
+      --good:#40d98c; --good-soft:#12261e; --warn:#f0b45a; --warn-soft:#2a2216; --bad:#ff6b72; --bad-soft:#2a141a; --info:#6ea8e0;
+      --grid:#282c34;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 14px 34px -18px rgba(0,0,0,.7);
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  code, .mono { font-variant-numeric:tabular-nums; }
+  .app { display:flex; align-items:flex-start; min-height:100vh; }
+  .sidebar { position:sticky; top:0; height:100vh; width:274px; flex:none; z-index:40; display:flex; flex-direction:column; overflow-y:auto; padding:20px 14px 16px; background:var(--sidebar-bg); border-right:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:11px; padding:4px 10px 16px; margin-bottom:6px; border-bottom:1px solid var(--line); }
+  .glyph { width:32px; height:32px; flex:none; border-radius:9px; background:var(--accent); display:grid; place-items:center; color:#fff; font-family:var(--mono); font-size:18px; box-shadow:0 5px 14px -5px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .brand .wm { display:flex; flex-direction:column; line-height:1.25; }
+  .brand .wm b { font-family:var(--display); font-weight:600; font-size:14.5px; letter-spacing:-.01em; }
+  .brand .wm span { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  nav.nav { display:flex; flex-direction:column; }
+  .nav-group { margin-top:13px; }
+  .nav-group-label { font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); padding:0 11px 6px; }
+  .nav-item { display:flex; align-items:center; gap:11px; width:100%; text-align:left; cursor:pointer; background:none; border:none; font-family:var(--sans); font-size:13.5px; color:var(--muted); padding:7px 11px; border-radius:8px; transition:.12s; line-height:1.3; }
+  .nav-item .n { font-family:var(--mono); font-size:11px; color:color-mix(in srgb, var(--muted) 75%, transparent); min-width:15px; text-align:right; }
+  .nav-item:hover { background:var(--hover); color:var(--ink); }
+  .nav-item.active { background:var(--accent-soft); color:var(--accent); font-weight:500; }
+  .nav-item.active .n { color:var(--accent); }
+  .side-foot { margin-top:auto; padding:15px 11px 2px; font-family:var(--mono); font-size:11px; line-height:1.7; color:var(--muted); }
+  .side-foot a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
+  .side-foot a:hover { color:var(--accent); border-color:var(--accent); }
+  .main { flex:1; min-width:0; padding:42px clamp(24px,4vw,60px) 100px; }
+  .main-inner { max-width:960px; margin:0 auto; }
+  .topbar, .backdrop { display:none; }
+  .hero-eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin:0 0 14px; }
+  .hero h1 { font-family:var(--display); font-weight:600; font-size:clamp(31px,4.6vw,47px); margin:0 0 16px; letter-spacing:-.026em; line-height:1.03; max-width:15ch; }
+  .hero h1 em { font-style:normal; color:var(--accent); }
+  .hero p { color:var(--muted); margin:0; max-width:62ch; font-size:16.5px; line-height:1.6; }
+  .hero p strong { color:var(--ink); font-weight:600; }
+  .levers { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:12px; margin:30px 0 4px; }
+  .lever { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:15px 16px; box-shadow:var(--shadow); }
+  .lever b { font-family:var(--display); font-weight:600; font-size:14px; display:block; margin-bottom:4px; }
+  .lever span { font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .overview-hint { font-size:14.5px; color:var(--muted); margin:24px 0 0; line-height:1.6; max-width:66ch; }
+  .overview-hint b { color:var(--ink); font-weight:600; }
+  section.phase { display:none; }
+  section.phase.active { display:block; animation:fade .22s ease; }
+  @keyframes fade { from { opacity:0; transform:translateY(5px); } to { opacity:1; } }
+  .phase h2 { font-family:var(--display); font-weight:600; font-size:25px; margin:0 0 6px; letter-spacing:-.02em; }
+  .phase .lede { color:var(--muted); margin:0 0 20px; max-width:76ch; font-size:15.5px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px; margin-bottom:16px; box-shadow:var(--shadow); }
+  .lab { display:grid; grid-template-columns:244px 1fr; gap:22px; align-items:start; }
+  @media (max-width:760px){ .lab { grid-template-columns:1fr; } }
+  .controls { display:flex; flex-direction:column; gap:11px; }
+  .stage { min-width:0; display:flex; flex-direction:column; gap:14px; }
+  label.fld { display:block; font-family:var(--mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  input[type=range] { width:100%; accent-color:var(--accent); height:4px; }
+  .slabel { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .slabel b { color:var(--ink); font-size:14px; }
+  button.act { font-family:var(--sans); font-size:13px; background:var(--accent); color:#fff; border:none; padding:9px 14px; border-radius:9px; cursor:pointer; font-weight:500; text-align:left; box-shadow:0 4px 12px -5px color-mix(in srgb, var(--accent) 60%, transparent); transition:.14s; }
+  button.act:hover { filter:brightness(1.06); }
+  button.ghost { font-family:var(--sans); font-size:13px; background:var(--panel-2); color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:9px; cursor:pointer; text-align:left; }
+  button.ghost:hover { border-color:var(--accent); }
+  button.ghost.sel { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .seg { display:flex; gap:6px; flex-wrap:wrap; } .seg button { flex:1 1 auto; }
+  .toggle { display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink); cursor:pointer; user-select:none; }
+  .toggle input { width:16px; height:16px; accent-color:var(--accent); }
+  .nav-item:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .verdict { font-family:var(--mono); font-size:13px; border-radius:9px; padding:11px 13px; border:1px solid var(--line); display:flex; gap:10px; align-items:baseline; background:var(--panel-2); }
+  .verdict .dot { width:9px; height:9px; border-radius:50%; flex:none; translate:0 2px; background:var(--muted); }
+  .verdict.ok { background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 40%,transparent); } .verdict.ok .dot { background:var(--good); }
+  .verdict.bad { background:var(--bad-soft); border-color:color-mix(in srgb,var(--bad) 40%,transparent); } .verdict.bad .dot { background:var(--bad); }
+  .verdict.warn { background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 40%,transparent); } .verdict.warn .dot { background:var(--warn); }
+  .proof { font-size:13px; color:var(--muted); border-left:3px solid var(--accent); padding:8px 0 8px 13px; margin-top:2px; background:linear-gradient(90deg, var(--accent-soft), transparent 80%); border-radius:0 8px 8px 0; }
+  .proof b { color:var(--ink); }
+  code { font-family:var(--mono); background:var(--accent-soft); color:var(--accent); padding:1px 5px; border-radius:5px; font-size:.88em; }
+  .big { font-family:var(--mono); font-size:23px; font-variant-numeric:tabular-nums; }
+  .big small { font-size:11px; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:.06em; display:block; }
+  svg.viz { width:100%; height:auto; display:block; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; }
+  svg.viz text { font-family:var(--mono); }
+  .chart { display:flex; align-items:flex-end; gap:3px; height:150px; padding-top:12px; border-bottom:1px solid var(--line); }
+  .colb { flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:2px; height:100%; }
+  .gp { width:100%; border-radius:3px 3px 0 0; background:var(--accent); transition:height .3s; min-height:1px; }
+  .colb .rn { font-family:var(--mono); font-size:8px; color:var(--muted); }
+  .krow { display:flex; gap:10px; flex-wrap:wrap; }
+  .kcard { flex:1 1 120px; border:1px solid var(--line); border-radius:9px; padding:9px 12px; background:var(--panel-2); }
+  .kcard h4 { margin:0 0 5px; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+  table.cmp { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }
+  table.cmp th, table.cmp td { text-align:right; padding:6px 9px; border-bottom:1px solid var(--line); }
+  table.cmp th:first-child, table.cmp td:first-child { text-align:left; }
+  table.cmp th { color:var(--muted); font-weight:500; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; }
+  .flow { display:flex; gap:5px; flex-wrap:wrap; min-height:26px; }
+  .tok { font-family:var(--mono); font-size:12px; padding:4px 8px; border-radius:7px; border:1px solid var(--line); background:var(--panel); }
+  .tok.ok { border-color:var(--good); color:var(--good); background:var(--good-soft); }
+  .tok.bad { border-color:var(--bad); color:var(--bad); background:var(--bad-soft); }
+  .tok.hi { border-color:var(--accent); color:var(--accent); }
+  .log-list { font-family:var(--mono); font-size:12px; line-height:1.7; max-height:150px; overflow:auto; }
+  @media (max-width:880px) {
+    .app { display:block; }
+    .topbar { display:flex; align-items:center; gap:11px; position:sticky; top:0; z-index:30; padding:11px 16px; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:saturate(1.5) blur(10px); border-bottom:1px solid var(--line); }
+    .topbar b { font-family:var(--display); font-weight:600; font-size:15.5px; }
+    .hamburger { margin-left:auto; display:grid; place-items:center; width:38px; height:38px; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--ink); cursor:pointer; font-family:var(--mono); font-size:17px; }
+    .sidebar { position:fixed; top:0; left:0; height:100dvh; width:286px; transform:translateX(-100%); transition:transform .22s ease; box-shadow:0 0 70px rgba(0,0,0,.28); }
+    .app.nav-open .sidebar { transform:none; }
+    .backdrop { display:block; position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.42); opacity:0; pointer-events:none; transition:opacity .22s; }
+    .app.nav-open .backdrop { opacity:1; pointer-events:auto; }
+    .main { padding:22px 18px 84px; }
+    .lab { grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="glyph">↯</span><span class="wm"><b>Realtime Lab</b><span>Real-time delivery</span></span></div>
+    <nav class="nav" id="nav" aria-label="Lessons"></nav>
+    <div class="side-foot">Every panel is also a runnable <code style="font-size:10px">npm run phaseN</code>.<br /><a href="https://github.com/swapnull-in/realtime-delivery" target="_blank" rel="noopener">View source ↗</a></div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <main class="main">
+    <div class="topbar"><span class="glyph">↯</span><b>Realtime Lab</b><button class="hamburger" id="hamburger" aria-label="Toggle navigation">≡</button></div>
+    <div class="main-inner">
+
+    <!-- OVERVIEW -->
+    <section class="phase" data-tab="Overview">
+      <div class="hero">
+        <p class="hero-eyebrow">Real-time · Realtime Lab</p>
+        <h1>Push one byte to <em>ten million</em> phones.</h1>
+        <p>A real-time system is a <strong>distributed routing problem</strong>, not a connection problem. Holding a
+          million WebSockets is the easy 20%; the hard part is "given a message for user X, which of my 500 gateway nodes
+          holds X's socket?" — and surviving the reconnect storm when you deploy. This lab draws the registry, the
+          backplane, the fan-out, and the recovery.</p>
+      </div>
+      <div class="levers">
+        <div class="lever"><b>Transport &amp; routing</b><span>WS vs SSE vs MQTT, the two-hop registry, C10M capacity.</span></div>
+        <div class="lever"><b>Delivery core</b><span>Ordering, receipts, group fan-out, push, E2E encryption.</span></div>
+        <div class="lever"><b>Presence &amp; resilience</b><span>Presence at scale, offline sync, backpressure, draining.</span></div>
+        <div class="lever"><b>Decide with a trigger</b><span>"X because requirement; revisit if trigger" — never "it depends".</span></div>
+      </div>
+      <p class="overview-hint"><b>Pick a lesson in the sidebar.</b> The throughline of every war story: <em>the hard part
+        of real-time is the correlated-failure recovery path, not the happy path.</em> A deploy doesn't fail one
+        connection — it fails millions simultaneously, and the recovery is itself the load spike.</p>
+    </section>
+
+    <!-- 1 · TRANSPORTS -->
+    <section class="phase" data-tab="1 · Transports">
+      <h2>Transports — decide with a trigger, don't enumerate</h2>
+      <p class="lede">Every transport answers one question: <em>how does the server reach a client that didn't just ask
+        for anything?</em> The interview-winning move is a decision tree, not a favorite — pick the workload and read off
+        the answer with its reason.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <label class="fld">workload</label>
+          <button class="ghost sel" data-w="push">📈 Push-dominant feed / notifications</button>
+          <button class="ghost" data-w="chat">💬 Bidirectional low-latency chat</button>
+          <button class="ghost" data-w="mobile">📱 Constrained mobile / IoT / 2G</button>
+          <button class="ghost" data-w="proxy">🧱 Must traverse any corporate proxy</button>
+          <div class="verdict ok" id="t-verdict"><span class="dot"></span><span id="t-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <table class="cmp"><thead><tr><th>transport</th><th>dir</th><th>latency</th><th>reconnect</th><th>overhead</th></tr></thead><tbody id="t-tbody"></tbody></table>
+          <p class="proof"><b>The proof:</b> WebSocket is the default for <em>chat</em> because it's bidirectional and
+            latency-sensitive both ways (typing/receipts flow client→server constantly). But SSE is criminally underused
+            for <em>push-dominant</em> feeds — reconnect + replay come free. Say "SSE here because the traffic is 95%
+            server→client" and you've out-signaled "we use WebSockets." Long-poll is the universal fallback; MQTT is the
+            low-end-mobile answer.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 2 · TWO-HOP -->
+    <section class="phase" data-tab="2 · Two-hop routing">
+      <h2>The two-hop problem — which node holds user X?</h2>
+      <p class="lede">A WebSocket pins a user to <em>one</em> gateway node. When Y sends a message to X, Y's node has no
+        idea where X lives. The load balancer's stickiness does <strong>not</strong> solve this — you need a separate
+        <strong>connection registry</strong> (user→node) plus a <strong>pub/sub backplane</strong>. Conflating the two
+        is the #1 disqualifier.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="h-send">▶ Alice (gw1) → Bob (gw3)</button>
+          <label class="toggle"><input type="checkbox" id="h-dead" /> Bob's node crashed (dead-node window)</label>
+          <div class="verdict" id="h-verdict"><span class="dot"></span><span id="h-vtext">Send a message and watch it hop the backplane.</span></div>
+        </div>
+        <div class="stage">
+          <svg class="viz" id="h-svg" viewBox="0 0 420 250"></svg>
+          <p class="proof"><b>The proof:</b> the message doesn't go straight to Bob — it looks up Bob in the registry
+            (→ gw3), publishes to gw3's channel on the backplane, and gw3 pushes it down Bob's socket. If Bob's node
+            crashed, the TTL registry still points at the dead node for a few seconds (the <b>dead-node window</b>) and
+            the message is dropped — but at-least-once retry + Bob's cursor resync catches the gap on reconnect, which is
+            why you accept the window instead of paying for consensus.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 11 · CAPACITY -->
+    <section class="phase" data-tab="11 · C10M Capacity">
+      <h2>C10M — connections are a memory problem</h2>
+      <p class="lede">Holding millions of connections is <strong>memory-bound</strong>, not CPU-bound: each idle
+        WebSocket costs tens of KB. Thread-per-connection is dead (10k threads = GBs of stack) — one event loop
+        multiplexes them all. And you plan capacity for the <strong>failure case</strong>: a dead node's connections
+        stampede onto the survivors.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><div class="slabel"><span>node RAM</span><b id="c-ramv">64 GB</b></div><input type="range" id="c-ram" min="16" max="256" step="16" value="64" /></div>
+          <div><div class="slabel"><span>per-conn state</span><b id="c-perv">40 KB</b></div><input type="range" id="c-per" min="20" max="120" step="5" value="40" /></div>
+          <div><div class="slabel"><span>failover headroom</span><b id="c-hrv">20%</b></div><input type="range" id="c-hr" min="0" max="50" step="5" value="20" /></div>
+          <div class="verdict ok" id="c-verdict"><span class="dot"></span><span id="c-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>theoretical max / node</h4><div class="big" id="c-theo">—</div></div>
+            <div class="kcard"><h4>lean cap / node</h4><div class="big" id="c-lean" style="color:var(--accent)">—</div></div>
+            <div class="kcard"><h4>nodes for 10M conns</h4><div class="big" id="c-nodes" style="color:var(--amber)">—</div></div>
+          </div>
+          <div class="chart" id="c-chart"></div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">memory: thread-per-conn (1 MB/thread) vs event loop (per-conn KB) as connections grow</div>
+          <p class="proof"><b>The proof:</b> RAM ÷ per-conn state gives a theoretical max, but you run well below it — a
+            <b>lean cap</b> that leaves room for message-processing CPU, GC pauses, and (the staff distinction) failover
+            absorption. Derive the node count from memory + headroom; never quote a memorized "2M/node." Thread-per-conn
+            memory explodes linearly at 1 MB/thread; the event loop stays flat.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 3 · ORDERING -->
+    <section class="phase" data-tab="3 · Ordering">
+      <h2>Ordering — server seqNo, never client clocks</h2>
+      <p class="lede">Networks reorder messages. You need messages in a conversation to appear in the <strong>same order
+        for everyone</strong> — not a global order (impossibly expensive), just per-conversation. The mechanism: a
+        server-assigned <strong>seqNo scoped to the conversation</strong> (the partition key) + a client reorder buffer
+        that holds gaps until they fill.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><label class="fld">order by</label><div class="seg"><button class="ghost sel" id="o-seq">server seqNo</button><button class="ghost" id="o-clock">client clock</button></div></div>
+          <button class="act" id="o-arrive">▶ Deliver next (out of order)</button>
+          <button class="ghost" id="o-reset">↺ Reset</button>
+          <div class="verdict" id="o-verdict"><span class="dot"></span><span id="o-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="kcard"><h4>arrival order (off the wire)</h4><div class="flow" id="o-wire"></div></div>
+          <div class="kcard"><h4>rendered order</h4><div class="flow" id="o-render"></div></div>
+          <p class="proof"><b>The proof:</b> ordering by the <em>server seqNo</em>, a gap (a missing seq) is held in the
+            reorder buffer until the missing message arrives — the conversation renders correctly for everyone. Ordering
+            by <em>client clocks</em>, skew and malicious clients scramble it: "nvm" renders before "are you ok?". The
+            server seqNo is truth; client time is only a display/dedup hint.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 4 · RECEIPTS -->
+    <section class="phase" data-tab="4 · Receipts">
+      <h2>Receipts — sent is persistence, not delivery</h2>
+      <p class="lede">The famous ticks: <strong>sent</strong> (durably stored — a server fact), <strong>delivered</strong>
+        (reached the device — a client ACK), <strong>read</strong> (opened — a client signal). The non-obvious staff
+        point: "sent" must be backed by <em>persistence</em>, not fan-out success, or a delivery hiccup looks like a send
+        failure.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="rc-send">① Alice sends</button>
+          <button class="ghost" id="rc-deliver">② Bob's device ACKs</button>
+          <button class="ghost" id="rc-read">③ Bob opens chat</button>
+          <button class="ghost" id="rc-reset">↺ Reset</button>
+          <div class="verdict" id="rc-verdict"><span class="dot"></span><span id="rc-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <svg class="viz" id="rc-svg" viewBox="0 0 420 220"></svg>
+          <p class="proof"><b>The proof:</b> the single grey tick fires the instant the server <em>persists</em> and
+            assigns a seqNo — before Bob is even reached — because "sent" means durably stored. Double-grey = delivered
+            (Bob's device ACKed), double-blue = read. And you <b>collapse receipts</b> ("read up to seqNo N" in one
+            message): in a 50-person group, naive per-message read receipts are 50× the message traffic.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 8 · GROUP FAN-OUT -->
+    <section class="phase" data-tab="8 · Group fan-out">
+      <h2>Group fan-out — write vs read, the threshold</h2>
+      <p class="lede">Where do you pay the fan-out cost? <strong>Fan-out-on-write</strong> copies each message into every
+        recipient's inbox (fast reads, write amplification = group size). <strong>Fan-out-on-read</strong> stores it
+        once in a shared log (cheap writes, reads do the work). The staff answer is a threshold hybrid — and the crossover
+        is where write-amp cost meets read-query cost.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><div class="slabel"><span>group size</span><b id="gf-nv">50</b></div><input type="range" id="gf-n" min="1" max="100000" value="50" /></div>
+          <div><div class="slabel"><span>fraction online</span><b id="gf-onv">40%</b></div><input type="range" id="gf-on" min="1" max="100" value="40" /></div>
+          <div class="verdict" id="gf-verdict"><span class="dot"></span><span id="gf-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>fan-out-on-write cost</h4><div class="big" id="gf-write">—<small>inbox writes / msg</small></div></div>
+            <div class="kcard"><h4>fan-out-on-read cost</h4><div class="big" id="gf-read" style="color:var(--accent)">—<small>1 log write + live pushes</small></div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> below ~a few hundred members, fan-out-on-write wins — materialize per-inbox
+            copies for O(1) reads. Above it, one message to a 100k-member group = <b>100k inbox writes</b> (the celebrity
+            problem, ~50k writes/sec for one busy group), so you store it once in a shared log and fan out the <em>live
+            push only to currently-online members</em> — the offline majority syncs from the log on reconnect.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 7 · PUSH -->
+    <section class="phase" data-tab="7 · Push">
+      <h2>Push — a wake-up nudge, not delivery</h2>
+      <p class="lede">When the recipient has no live socket, you hand the message to APNs/FCM to wake the device. Three
+        staff details: the <strong>online↔push race</strong> (dedup by msgId), "sent to APNs" ≠ "delivered" (the
+        <strong>inbox sync</strong> on open is the real delivery), and notification <strong>collapse</strong> (one buzz,
+        not five).</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><label class="fld">recipient</label><div class="seg"><button class="ghost sel" id="p-online">online</button><button class="ghost" id="p-offline">offline</button></div></div>
+          <button class="act" id="p-send">▶ Send 3 messages</button>
+          <button class="ghost" id="p-dead">🪦 App uninstalled (410)</button>
+          <button class="ghost" id="p-reset">↺ Reset</button>
+          <div class="verdict" id="p-verdict"><span class="dot"></span><span id="p-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="kcard"><h4>delivery path</h4><div class="log-list" id="p-log">—</div></div>
+          <p class="proof"><b>The proof:</b> online → the socket delivers directly. Offline → APNs/FCM sends a contentless
+            <em>nudge</em>; the message waits in the durable inbox and is really delivered by the sync on app-open. If a
+            message arrives just as the app backgrounds, it goes to both socket <em>and</em> push — the client dedups by
+            msgId. Three pushes <b>collapse</b> to one "3 messages" buzz. A 410 prunes the dead token.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 12 · E2E -->
+    <section class="phase" data-tab="12 · E2E encryption">
+      <h2>E2E — the server becomes a blind relay</h2>
+      <p class="lede">With end-to-end encryption (the Signal Protocol), only the clients hold keys — the server relays
+        ciphertext it cannot read. <strong>X3DH</strong> agrees a key even while the recipient is offline;
+        the <strong>double ratchet</strong> evolves a key per message (forward secrecy + self-healing). The staff point:
+        E2E <em>reshapes the architecture</em>, it isn't "add encryption."</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="e-agree">① X3DH key agreement (Bob offline)</button>
+          <button class="ghost" id="e-send">② Send a message (ratchet)</button>
+          <button class="ghost" id="e-reveal">🔓 Attacker steals today's key</button>
+          <button class="ghost" id="e-reset">↺ Reset</button>
+          <div class="verdict" id="e-verdict"><span class="dot"></span><span id="e-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <svg class="viz" id="e-svg" viewBox="0 0 420 170"></svg>
+          <div class="kcard"><h4>what the server sees</h4><div class="log-list" id="e-log">—</div></div>
+          <p class="proof"><b>The proof:</b> Alice and Bob derive the <em>same</em> shared secret via Diffie-Hellman
+            without Bob online; each message ratchets a fresh key, so stealing today's key can't decrypt <b>past</b>
+            messages (forward secrecy). The server only ever holds ciphertext — which forces the architecture: no
+            server-side search or moderation, push carries no preview, multi-device must encrypt per-device, and groups
+            need Sender Keys for O(1) fan-out.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 5 · PRESENCE -->
+    <section class="phase" data-tab="5 · Presence">
+      <h2>Presence — a fan-out amplification problem</h2>
+      <p class="lede">"Online / last-seen / typing" is where naive chat designs die. It's soft state (Redis TTL, not the
+        message DB), and the killer is fan-out: one flip notifies <em>everyone watching</em>. A flapping mobile user in a
+        big group is a self-inflicted DDoS. The cheapest update is the one you never send.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><div class="slabel"><span>watchers per user</span><b id="pr-wv">500</b></div><input type="range" id="pr-w" min="10" max="5000" step="10" value="500" /></div>
+          <div><div class="slabel"><span>flaps / minute</span><b id="pr-fv">5</b></div><input type="range" id="pr-f" min="1" max="20" value="5" /></div>
+          <label class="toggle"><input type="checkbox" id="pr-mit" checked /> Subscribe-on-view + debounce + aggregate</label>
+          <div class="verdict" id="pr-verdict"><span class="dot"></span><span id="pr-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>naive pushes / min</h4><div class="big" id="pr-naive" style="color:var(--bad)">—</div></div>
+            <div class="kcard"><h4>mitigated pushes / min</h4><div class="big" id="pr-mitv" style="color:var(--good)">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> naive presence = flaps × watchers, and it explodes. <b>Subscribe-on-view</b>
+            (watch the ~20 contacts on screen, not all 500) + <b>debounce</b> (wait 30–60 s before broadcasting "offline"
+            to absorb mobile flapping) + <b>aggregate</b> ("1.2k online" for huge groups) cut it by orders of magnitude.
+            Presence is eventually consistent by design — WhatsApp's slightly-stale "last seen" is the correct cost
+            decision, not a bug.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 6 · OFFLINE SYNC -->
+    <section class="phase" data-tab="6 · Offline sync">
+      <h2>Offline sync — fetch-since a cursor, not replay-the-queue</h2>
+      <p class="lede">A phone in a tunnel for 3 days reconnects. Wrong: keep a durable per-user queue of every message.
+        Right: messages live in the shared conversation log with monotonic seqNos; the client remembers its
+        <strong>cursor</strong> (lastRead) and asks "give me everything after N." One primitive solves offline catch-up,
+        reconnect gap-fill, and multi-device read-sync.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><div class="slabel"><span>hours offline</span><b id="s-hv">6h</b></div><input type="range" id="s-h" min="0" max="72" value="6" /></div>
+          <button class="act" id="s-reconnect">▶ Reconnect &amp; sync</button>
+          <div class="verdict" id="s-verdict"><span class="dot"></span><span id="s-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <svg class="viz" id="s-svg" viewBox="0 0 420 120"></svg>
+          <p class="proof"><b>The proof:</b> the gap between the client's cursor and the log head <em>is</em> the queue —
+            no separate per-user queue structure needed. Reconnect fetches just that delta (<code>seqNo &gt; lastRead</code>),
+            so a 3-second or 3-day gap works identically and is idempotent (ask twice, same answer). The same cursor
+            replicated across a user's devices keeps read-state in sync — one primitive, three problems.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 9 · BACKPRESSURE -->
+    <section class="phase" data-tab="9 · Backpressure">
+      <h2>Backpressure — one slow client takes down a node</h2>
+      <p class="lede">If the server pushes faster than a slow 2G client can drain, its send buffer grows. Unbounded
+        buffering = OOM, and the GC pressure stalls the event loop so <em>every</em> connection on that node degrades.
+        The fix: bound every send buffer and <strong>drop the slow consumer</strong> — node availability beats one
+        degraded client, and they re-sync from a cursor anyway.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><label class="fld">policy</label><div class="seg"><button class="ghost sel" id="b-un">unbounded</button><button class="ghost" id="b-bound">bound + drop</button></div></div>
+          <button class="act" id="b-run">▶ Run 24 ticks (1 slow 2G client)</button>
+          <div class="verdict" id="b-verdict"><span class="dot"></span><span id="b-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="chart" id="b-chart"></div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">node memory (sum of send buffers) per tick · red line = OOM</div>
+          <p class="proof"><b>The proof:</b> unbounded → the slow client's buffer grows every tick, node memory climbs to
+            OOM, and the healthy connections degrade too (one slow client, whole-node outage). Bound + drop caps each
+            buffer and closes the slow consumer when it overflows → node memory stays flat and the healthy connections
+            are untouched. Coalesce latest-wins for presence/typing; only spill to a durable queue for messages you
+            truly can't lose.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 10 · DRAINING -->
+    <section class="phase" data-tab="10 · Draining">
+      <h2>The reconnect storm — deploy without dropping 2M sockets</h2>
+      <p class="lede">The signature staff question. A naive deploy kills all sockets at once → they all reconnect in the
+        same instant → registry write storm + auth stampede + presence flap → cascading outage. The fix: drain
+        <strong>slowly</strong>, reconnect with <strong>jitter</strong>, size survivors with <strong>headroom</strong>,
+        and resume from a <strong>cursor</strong>.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div><label class="fld">deploy</label><div class="seg"><button class="ghost sel" id="d-naive">naive (kill all)</button><button class="ghost" id="d-drain">drain + jitter</button></div></div>
+          <div><div class="slabel"><span>jitter window</span><b id="d-jv">10</b></div><input type="range" id="d-j" min="1" max="20" value="10" /></div>
+          <button class="act" id="d-run">▶ Deploy (2M connections)</button>
+          <div class="verdict" id="d-verdict"><span class="dot"></span><span id="d-vtext">—</span></div>
+        </div>
+        <div class="stage">
+          <div class="chart" id="d-chart"></div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">reconnects per tick · red line = survivor accept capacity</div>
+          <p class="proof"><b>The proof:</b> naive → all 2M reconnect in one tick, a spike far past the survivors' accept
+            capacity → overload. Slow drain over a long window + jittered staggered reconnect flattens it to a plateau
+            under capacity; a wider jitter window spreads it further. Resume from a cursor so each reconnect is cheap.
+            And run <b>continuous connection rotation</b> in steady state so the recovery path is always warm — a deploy
+            is just a louder version of normal.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <div class="side-foot" style="margin-top:24px; padding-top:22px; border-top:1px solid var(--line); text-align:center">Browser port of the <code style="font-size:10px">src/phase*</code> scripts · same mechanics · MIT</div>
+    </div><!-- /main-inner -->
+  </main>
+</div>
+
+<script>
+const sections = [...document.querySelectorAll('section.phase')];
+const navEl = document.getElementById('nav'), appEl = document.getElementById('app');
+const tabButtons = [];
+const slug = s => s.dataset.tab.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const closeNav = () => appEl.classList.remove('nav-open');
+const TIER_OF = {
+  'overview':'Overview',
+  '1-transports':'Transport & routing','2-two-hop-routing':'Transport & routing','11-c10m-capacity':'Transport & routing',
+  '3-ordering':'Delivery core','4-receipts':'Delivery core','8-group-fan-out':'Delivery core','7-push':'Delivery core','12-e2e-encryption':'Delivery core',
+  '5-presence':'Presence & resilience','6-offline-sync':'Presence & resilience','9-backpressure':'Presence & resilience','10-draining':'Presence & resilience',
+};
+navEl.setAttribute('role','tablist'); navEl.setAttribute('aria-orientation','vertical');
+let curTier=null, groupEl=null;
+sections.forEach((sec,i)=>{ const id=slug(sec), tier=TIER_OF[id]||'More';
+  if(tier!==curTier){ groupEl=document.createElement('div'); groupEl.className='nav-group';
+    const h=document.createElement('div'); h.className='nav-group-label'; h.textContent=tier; groupEl.appendChild(h); navEl.appendChild(groupEl); curTier=tier; }
+  sec.id='panel-'+id; sec.setAttribute('role','tabpanel');
+  const parts=sec.dataset.tab.split('·').map(s=>s.trim());
+  const b=document.createElement('button'); b.className='nav-item'; b.setAttribute('role','tab');
+  b.innerHTML=`<span class="n">${parts.length>1?parts[0]:''}</span><span class="t">${parts.length>1?parts[1]:parts[0]}</span>`;
+  b.onclick=()=>{ activate(i,true); closeNav(); };
+  b.onkeydown=(e)=>{ const d=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:e.key==='Home'?'first':e.key==='End'?'last':0; if(!d)return; e.preventDefault();
+    const n=d==='first'?0:d==='last'?sections.length-1:(i+d+sections.length)%sections.length; activate(n,true); tabButtons[n].focus(); };
+  tabButtons.push(b); groupEl.appendChild(b); });
+function activate(i,push){ sections.forEach((s,j)=>s.classList.toggle('active',i===j));
+  tabButtons.forEach((b,j)=>{ const on=i===j; b.classList.toggle('active',on); b.setAttribute('aria-selected',String(on)); b.tabIndex=on?0:-1; });
+  if(push && location.hash.slice(1)!==slug(sections[i])) history.replaceState(null,'','#'+slug(sections[i]));
+  window.scrollTo({ top:0, behavior: reduceMotion?'auto':'smooth' });
+  if(PANELS[i] && !PANELS[i].done){ PANELS[i](); PANELS[i].done=true; } }
+function fromHash(){ const i=sections.findIndex(s=>slug(s)===location.hash.slice(1)); activate(i>=0?i:0,false); }
+addEventListener('hashchange',fromHash);
+document.getElementById('hamburger')?.addEventListener('click',()=>appEl.classList.toggle('nav-open'));
+document.getElementById('backdrop')?.addEventListener('click',closeNav);
+addEventListener('keydown',e=>{ if(e.key==='Escape') closeNav(); });
+
+const $=(s,r=document)=>r.querySelector(s), NS='http://www.w3.org/2000/svg';
+function S(tag, attrs={}, kids=[]){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k, attrs[k]); for(const c of [].concat(kids)) if(c) e.appendChild(c); return e; }
+function txt(t){ return document.createTextNode(t); }
+function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); return el; }
+function verdict(sel,tsel,kind,text){ const v=$(sel); v.className='verdict '+kind; $(tsel).innerHTML=text; }
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function fmt(n){ if(n>=1e9) return (n/1e9).toFixed(1)+'B'; if(n>=1e6) return (n/1e6).toFixed(n>=1e7?0:1)+'M'; if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1)+'k'; return ''+Math.round(n); }
+function chartBars(el, vals, colorFn, labelFn){ clear(el); const mx=Math.max(...vals,1); vals.forEach((v,i)=>{ const col=S('div',{class:'colb'}); const bar=S('div',{class:'gp'}); bar.style.background=colorFn(v,i); bar.style.height=(v/mx*118)+'px'; const rn=S('div',{class:'rn'}); rn.textContent=labelFn?labelFn(i):''; col.appendChild(bar); col.appendChild(rn); el.appendChild(col); }); }
+
+const PANELS = {};
+const idxOf = tab => sections.findIndex(s=>s.dataset.tab===tab);
+const box=(x,y,w,h,label,fill)=>{ const g=S('g'); g.appendChild(S('rect',{x,y,width:w,height:h,rx:8,fill:fill||'var(--panel)',stroke:'var(--line)','stroke-width':1.2}));
+  g.appendChild(S('text',{x:x+w/2,y:y+h/2+3.5,'text-anchor':'middle','font-size':10,fill:'var(--ink)'},[txt(label)])); return g; };
+const arrow=(x1,y1,x2,y2,color,dash)=>S('line',{x1,y1,x2,y2,stroke:color||'var(--muted)','stroke-width':1.6,'marker-end':'url(#ah)','stroke-dasharray':dash||'none'});
+
+/* ══ 1 · TRANSPORTS ══ */
+PANELS[idxOf('1 · Transports')] = function(){
+  const ROWS={
+    push:['SSE','S→C','low','built-in','tiny'], chat:['WebSocket','duplex','lowest','DIY','2–14 B'],
+    mobile:['MQTT','pub/sub','low','session','2 B'], proxy:['long-poll','C→S','poll','cursor','full HTTP'] };
+  const REC={ push:['SSE','it\'s a server-push-dominant feed — reconnect + Last-Event-ID replay are free, and it\'s plain HTTP.'],
+    chat:['WebSocket','chat is bidirectional and latency-sensitive both ways (typing/receipts flow C→S constantly).'],
+    mobile:['MQTT / custom binary','2-byte headers beat HTTP\'s hundreds — the battery/radio win on low-end 2G mobile.'],
+    proxy:['long-poll','it\'s the universal fallback when a proxy strips the WebSocket Upgrade header.'] };
+  function render(w){
+    $('#t-tbody').innerHTML=Object.entries(ROWS).map(([k,r])=>`<tr${k===w?' style="color:var(--accent)"':''}><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('');
+    const [pick,why]=REC[w]; verdict('#t-verdict','#t-vtext','ok',`<b>${pick}</b> — ${why}`);
+  }
+  document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ document.querySelectorAll('[data-w]').forEach(x=>x.classList.toggle('sel',x===b)); render(b.dataset.w); });
+  render('push');
+};
+
+/* ══ 2 · TWO-HOP ══ */
+PANELS[idxOf('2 · Two-hop routing')] = function(){
+  const svg=$('#h-svg');
+  function render(step,dead){ clear(svg);
+    svg.appendChild(S('defs',{},[S('marker',{id:'ah',markerWidth:8,markerHeight:8,refX:7,refY:3,orient:'auto'},[S('path',{d:'M0,0 L7,3 L0,6 Z',fill:'var(--muted)'})])]));
+    svg.appendChild(box(20,20,80,34,'Alice','var(--accent-soft)'));
+    svg.appendChild(box(20,196,80,34,'Bob',dead?'var(--bad-soft)':'var(--accent-soft)'));
+    svg.appendChild(box(150,20,90,30,'gw1'));
+    svg.appendChild(box(150,110,90,30,'gw2'));
+    svg.appendChild(box(150,196,90,34,dead?'gw3 ✝ crashed':'gw3', dead?'var(--bad-soft)':'var(--panel)'));
+    svg.appendChild(box(290,60,110,34,'Registry','var(--panel-2)'));
+    svg.appendChild(box(290,150,110,34,'Pub/Sub bus','var(--panel-2)'));
+    // Alice→gw1
+    if(step>=1) svg.appendChild(arrow(100,37,150,35,'var(--accent)'));
+    // gw1→registry lookup
+    if(step>=2){ svg.appendChild(arrow(240,40,290,72,'var(--muted)')); svg.appendChild(S('text',{x:250,y:52,'font-size':8,fill:'var(--muted)'},[txt('who has Bob?')])); }
+    // registry→ points gw3
+    if(step>=3) svg.appendChild(arrow(345,94,300,160,'var(--muted)','3 3'));
+    // gw1→bus→gw3
+    if(step>=4){ svg.appendChild(arrow(240,35,290,158,'var(--accent)')); svg.appendChild(arrow(290,170,240,205,dead?'var(--bad)':'var(--accent)')); }
+    // gw3→Bob
+    if(step>=5 && !dead) svg.appendChild(arrow(150,213,100,213,'var(--good)'));
+    if(step>=5 && dead) svg.appendChild(S('text',{x:150,y:245,'font-size':9,fill:'var(--bad)'},[txt('✗ dropped — dead-node window')]));
+  }
+  let s=0;
+  $('#h-send').onclick=()=>{ const dead=$('#h-dead').checked; s=0; const iv=setInterval(()=>{ s++; render(s,dead); if(s>=5){ clearInterval(iv);
+    if(dead) verdict('#h-verdict','#h-vtext','bad','Registry still points at crashed gw3 (TTL not expired) → message <b>dropped</b>. Bob\'s cursor resync catches it on reconnect — why you accept the window.');
+    else verdict('#h-verdict','#h-vtext','ok','Registry lookup → gw3 → publish to gw3\'s channel → gw3 pushes down Bob\'s socket. The LB never knew where Bob was — the <b>registry + backplane</b> did.'); } }, reduceMotion?0:260); };
+  $('#h-dead').onchange=()=>render(5,$('#h-dead').checked);
+  render(0,false);
+};
+
+/* ══ 11 · CAPACITY ══ */
+PANELS[idxOf('11 · C10M Capacity')] = function(){
+  function render(){ const ram=+$('#c-ram').value, per=+$('#c-per').value, hr=+$('#c-hr').value;
+    $('#c-ramv').textContent=ram+' GB'; $('#c-perv').textContent=per+' KB'; $('#c-hrv').textContent=hr+'%';
+    const theo=Math.floor(ram*1024*1024/per); const lean=Math.floor(theo*0.4); // conservative ~40% of theoretical
+    const perNodeWithHeadroom=Math.floor(lean/(1+hr/100)); const nodes=Math.ceil(10e6/perNodeWithHeadroom);
+    $('#c-theo').textContent=fmt(theo); $('#c-lean').textContent=fmt(lean); $('#c-nodes').textContent=nodes;
+    // chart: memory thread-per-conn vs event loop across conn counts
+    const counts=[10e3,50e3,1e5,3e5,5e5]; const tpc=counts.map(c=>c*1024/1024/1024); // GB at 1MB/thread
+    const el=counts.map(c=>c*per/1024/1024); // GB
+    const vals=counts.flatMap((c,i)=>[tpc[i],el[i]]);
+    chartBars($('#c-chart'), vals, (v,i)=> i%2===0?'var(--bad)':'var(--accent)', i=> i%2===0?fmt(counts[i/2]):'');
+    verdict('#c-verdict','#c-vtext','ok',`RAM ÷ ${per}KB = <b>${fmt(theo)}</b> theoretical, cap lean at <b>${fmt(lean)}</b>, ${hr}% failover headroom → <b>${nodes} nodes</b> for 10M. Red = thread-per-conn (1MB each), violet = event loop.`);
+  }
+  ['#c-ram','#c-per','#c-hr'].forEach(id=>$(id).oninput=render); render();
+};
+
+/* ══ 3 · ORDERING ══ */
+PANELS[idxOf('3 · Ordering')] = function(){
+  const msgs=[{seq:1,clk:30,txt:'hey'},{seq:2,clk:10,txt:'are you ok?'},{seq:3,clk:50,txt:'nvm'},{seq:4,clk:20,txt:'call me'}];
+  const wireOrder=[2,4,1,3]; // arrival order (indices into msgs by position) — out of order
+  let mode='seq', arrived=[];
+  function setMode(m){ mode=m; $('#o-seq').classList.toggle('sel',m==='seq'); $('#o-clock').classList.toggle('sel',m==='clock'); reset(); }
+  $('#o-seq').onclick=()=>setMode('seq'); $('#o-clock').onclick=()=>setMode('clock');
+  function reset(){ arrived=[]; paint(); verdict('#o-verdict','#o-vtext','warn','Deliver the messages (they arrive out of order) and watch how each policy renders them.'); }
+  function paint(){
+    $('#o-wire').innerHTML=arrived.map(m=>`<span class="tok">seq${m.seq} “${m.txt}”</span>`).join('')||'<span class="tok" style="opacity:.5">—</span>';
+    let rendered;
+    if(mode==='seq'){ // reorder buffer: render contiguous prefix by seq
+      const have=new Set(arrived.map(m=>m.seq)); const out=[]; let n=1; while(have.has(n)){ out.push(msgs.find(m=>m.seq===n)); n++; }
+      rendered=out; }
+    else rendered=[...arrived].sort((a,b)=>a.clk-b.clk);
+    $('#o-render').innerHTML=rendered.map(m=>`<span class="tok ${mode==='seq'?'ok':'bad'}">“${m.txt}”</span>`).join('')||'<span class="tok" style="opacity:.5">(buffer holding gap…)</span>';
+  }
+  function showDone(){ if(mode==='seq') verdict('#o-verdict','#o-vtext','ok','All 4 rendered in correct order — the reorder buffer held each gap until the missing seqNo filled.');
+    else verdict('#o-verdict','#o-vtext','bad','Client-clock order scrambled it: “call me” (clk 20) rendered before “hey” (clk 30). Clock skew is real; never trust client time.'); }
+  $('#o-arrive').onclick=()=>{ if(arrived.length>=4){ showDone(); return; }
+    const idx=wireOrder[arrived.length]; arrived.push(msgs[idx-1]); paint();
+    if(arrived.length>=4) showDone();
+    else verdict('#o-verdict','#o-vtext','warn', mode==='seq' ? 'Arrived out of order — the reorder buffer holds the gap until the missing seqNo fills in.' : 'Ordering by client clock — keep delivering and watch it scramble.'); };
+  $('#o-reset').onclick=reset; setMode('seq');
+};
+
+/* ══ 4 · RECEIPTS ══ */
+PANELS[idxOf('4 · Receipts')] = function(){
+  const svg=$('#rc-svg'); let state=0; // 0 none 1 sent 2 delivered 3 read
+  function tick(n,col){ const g=S('g'); for(let i=0;i<n;i++) g.appendChild(S('path',{d:`M${8+i*7} 0 l3 4 l6 -8`,fill:'none',stroke:col,'stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round'})); return g; }
+  function render(){ clear(svg);
+    svg.appendChild(S('defs',{},[S('marker',{id:'ah',markerWidth:8,markerHeight:8,refX:7,refY:3,orient:'auto'},[S('path',{d:'M0,0 L7,3 L0,6 Z',fill:'var(--muted)'})])]));
+    svg.appendChild(box(20,16,80,30,'Alice','var(--accent-soft)')); svg.appendChild(box(180,16,90,30,'Server','var(--panel-2)')); svg.appendChild(box(330,16,70,30,'Bob','var(--accent-soft)'));
+    [65,225,365].forEach(x=>svg.appendChild(S('line',{x1:x,y1:46,x2:x,y2:210,stroke:'var(--line)','stroke-width':1})));
+    if(state>=1){ svg.appendChild(arrow(65,66,225,66,'var(--accent)')); svg.appendChild(S('text',{x:70,y:60,'font-size':8,fill:'var(--muted)'},[txt('send')]));
+      svg.appendChild(S('path',{d:'M225 78 a10 10 0 1 1 -0.1 0',fill:'none',stroke:'var(--muted)','stroke-width':1})); svg.appendChild(S('text',{x:200,y:100,'font-size':8,fill:'var(--muted)'},[txt('persist seqNo')]));
+      const t=tick(1,'var(--muted)'); t.setAttribute('transform','translate(30,108)'); svg.appendChild(arrow(225,112,65,112,'var(--muted)')); svg.appendChild(t); svg.appendChild(S('text',{x:110,y:106,'font-size':8,fill:'var(--muted)'},[txt('SENT ✓')])); }
+    if(state>=2){ svg.appendChild(arrow(225,130,365,130,'var(--accent)')); svg.appendChild(S('text',{x:270,y:124,'font-size':8,fill:'var(--muted)'},[txt('deliver')]));
+      const t=tick(2,'var(--muted)'); t.setAttribute('transform','translate(28,158)'); svg.appendChild(arrow(365,150,65,150,'var(--muted)','3 3')); svg.appendChild(t); svg.appendChild(S('text',{x:150,y:145,'font-size':8,fill:'var(--muted)'},[txt('DELIVERED ✓✓')])); }
+    if(state>=3){ const t=tick(2,'var(--info)'); t.setAttribute('transform','translate(28,196)'); svg.appendChild(arrow(365,188,65,188,'var(--info)','3 3')); svg.appendChild(t); svg.appendChild(S('text',{x:160,y:183,'font-size':8,fill:'var(--info)'},[txt('READ ✓✓ (blue)')])); }
+  }
+  const V=['Send a message to start the sent→delivered→read lifecycle.',
+    'Single grey tick fired the instant the server <b>persisted</b> — before Bob was reached. "Sent" = durably stored, not delivered.',
+    'Double-grey: Bob\'s device ACKed receipt. Delivery is a client ACK, distinct from the server\'s persistence.',
+    'Double-blue: Bob opened the chat. Collapse receipts as "read up to seqNo N" — per-message receipts are 50× traffic in a big group.'];
+  const K=['warn','warn','ok','ok'];
+  $('#rc-send').onclick=()=>{ state=1; render(); verdict('#rc-verdict','#rc-vtext',K[1],V[1]); };
+  $('#rc-deliver').onclick=()=>{ if(state<1)return; state=2; render(); verdict('#rc-verdict','#rc-vtext',K[2],V[2]); };
+  $('#rc-read').onclick=()=>{ if(state<2)return; state=3; render(); verdict('#rc-verdict','#rc-vtext',K[3],V[3]); };
+  $('#rc-reset').onclick=()=>{ state=0; render(); verdict('#rc-verdict','#rc-vtext','warn',V[0]); };
+  render(); verdict('#rc-verdict','#rc-vtext','warn',V[0]);
+};
+
+/* ══ 8 · GROUP FAN-OUT ══ */
+PANELS[idxOf('8 · Group fan-out')] = function(){
+  const THRESH=300;
+  function render(){ const n=+$('#gf-n').value, on=+$('#gf-on').value; $('#gf-nv').textContent=fmt(n)||n; $('#gf-onv').textContent=on+'%';
+    const online=Math.max(1,Math.round(n*on/100));
+    $('#gf-write').innerHTML=(fmt(n)||''+n)+'<small>inbox writes / msg</small>';
+    $('#gf-read').innerHTML=('1 + '+(fmt(online)||online))+'<small>1 log write + live pushes</small>';
+    const write=n>=THRESH;
+    if(write) verdict('#gf-verdict','#gf-vtext','bad',`${fmt(n)||n} members → fan-out-on-write = <b>${fmt(n)||n} inbox writes</b> per message (the celebrity problem). Flip to <b>fan-out-on-read</b>: 1 shared-log write + push only to ${fmt(online)||online} online.`);
+    else verdict('#gf-verdict','#gf-vtext','ok',`${n} members (below ~${THRESH}) → <b>fan-out-on-write</b>: ${n} cheap inbox copies for O(1) pre-materialized reads. Right choice below the threshold.`);
+  }
+  ['#gf-n','#gf-on'].forEach(id=>$(id).oninput=render); render();
+};
+
+/* ══ 7 · PUSH ══ */
+PANELS[idxOf('7 · Push')] = function(){
+  let online=true, seen=new Set(), logs=[], tokenDead=false;
+  function setMode(o){ online=o; $('#p-online').classList.toggle('sel',o); $('#p-offline').classList.toggle('sel',!o); reset(); }
+  $('#p-online').onclick=()=>setMode(true); $('#p-offline').onclick=()=>setMode(false);
+  function reset(){ seen=new Set(); logs=[]; paint(); verdict('#p-verdict','#p-vtext','warn','Send messages to a '+(online?'online':'offline')+' recipient.'); }
+  function paint(){ $('#p-log').innerHTML=logs.length?logs.join('<br>'):'—'; }
+  $('#p-send').onclick=()=>{ logs=[]; if(online){ for(let i=1;i<=3;i++){ logs.push(`msg${i} → socket delivered ✓`); } paint();
+      verdict('#p-verdict','#p-vtext','ok','Recipient online → all 3 delivered directly down the socket. No push needed.'); }
+    else { if(tokenDead){ logs.push('APNs → 410 Unregistered → token pruned'); paint(); verdict('#p-verdict','#p-vtext','bad','Provider returned 410 (app uninstalled) → dead token deleted. No further pushes to this device.'); return; }
+      logs.push('3 msgs persisted to inbox'); logs.push('APNs/FCM ← 1 push (collapsed): “3 messages”'); logs.push('device wakes → sync inbox on open → 3 delivered ✓'); paint();
+      verdict('#p-verdict','#p-vtext','ok','Offline → 3 pushes <b>collapse</b> to one buzz; push is a wake-up nudge, the <b>inbox sync</b> on open is the real delivery. "Sent to APNs" ≠ "delivered".'); } };
+  $('#p-dead').onclick=()=>{ tokenDead=true; setMode(false); verdict('#p-verdict','#p-vtext','warn','Token marked dead — send now to see the 410 prune.'); };
+  setMode(true);
+};
+
+/* ══ 12 · E2E ══ */
+PANELS[idxOf('12 · E2E encryption')] = function(){
+  const svg=$('#e-svg'); let agreed=false, msgs=[], revealed=false;
+  function render(){ clear(svg);
+    svg.appendChild(S('defs',{},[S('marker',{id:'ah',markerWidth:8,markerHeight:8,refX:7,refY:3,orient:'auto'},[S('path',{d:'M0,0 L7,3 L0,6 Z',fill:'var(--muted)'})])]));
+    svg.appendChild(box(20,20,90,32,'Alice','var(--accent-soft)'));
+    svg.appendChild(box(165,20,90,32,'Server','var(--panel-2)'));
+    svg.appendChild(box(310,20,90,32, agreed?'Bob':'Bob (offline)','var(--accent-soft)'));
+    if(agreed){ svg.appendChild(arrow(255,50,255,84,'var(--muted)')); svg.appendChild(S('text',{x:120,y:78,'font-size':8.5,fill:'var(--muted)'},[txt('Alice fetches Bob\'s prekey bundle from server (Bob offline)')]));
+      svg.appendChild(S('text',{x:210,y:108,'text-anchor':'middle','font-size':9,fill:'var(--good)'},[txt('✓ both derive the SAME shared secret via DH')])); }
+    // messages as ciphertext blobs the server holds
+    msgs.forEach((m,i)=>{ svg.appendChild(S('rect',{x:170+i*28,y:120,width:24,height:20,rx:3,fill:'var(--panel-2)',stroke:'var(--muted)','stroke-width':1}));
+      svg.appendChild(S('text',{x:182+i*28,y:134,'text-anchor':'middle','font-size':7,fill:'var(--muted)'},[txt('🔒')])); });
+    if(msgs.length) svg.appendChild(S('text',{x:165,y:158,'font-size':8.5,fill:'var(--muted)'},[txt('server sees only ciphertext ↑')]));
+  }
+  function log(){ const lines=['server stores: opaque ciphertext blobs (cannot read)'];
+    if(msgs.length) lines.push('each message: a fresh ratcheted key (forward secrecy)');
+    if(revealed) lines.push('attacker stole msg'+msgs.length+'\'s key → <span style="color:var(--good)">past messages still safe</span> (keys deleted after use)');
+    lines.push('forces: no server search/moderation · push = no preview · per-device keys · Sender Keys for groups');
+    $('#e-log').innerHTML=lines.join('<br>'); }
+  $('#e-agree').onclick=()=>{ agreed=true; render(); log(); verdict('#e-verdict','#e-vtext','ok','X3DH: Alice fetched Bob\'s published prekey bundle and derived a shared secret via Diffie-Hellman — <b>without Bob online</b>. Async key agreement is what makes offline messaging work.'); };
+  $('#e-send').onclick=()=>{ if(!agreed){ verdict('#e-verdict','#e-vtext','warn','Agree a key first (X3DH).'); return; } if(msgs.length>=4) return; msgs.push({}); render(); log();
+    verdict('#e-verdict','#e-vtext','ok',`Message ${msgs.length} encrypted with a <b>fresh ratcheted key</b>. The server relayed ciphertext it can\'t read — a blind relay.`); };
+  $('#e-reveal').onclick=()=>{ if(!msgs.length){ verdict('#e-verdict','#e-vtext','warn','Send a message first.'); return; } revealed=true; log();
+    verdict('#e-verdict','#e-vtext','ok','Attacker steals the current key — but <b>past messages stay secret</b> (each used a different key, deleted after use). That\'s forward secrecy; the DH ratchet also self-heals future messages.'); };
+  $('#e-reset').onclick=()=>{ agreed=false; msgs=[]; revealed=false; render(); $('#e-log').innerHTML='—'; verdict('#e-verdict','#e-vtext','warn','Run X3DH key agreement to begin.'); };
+  render();
+};
+
+/* ══ 5 · PRESENCE ══ */
+PANELS[idxOf('5 · Presence')] = function(){
+  function render(){ const w=+$('#pr-w').value, f=+$('#pr-f').value, mit=$('#pr-mit').checked; $('#pr-wv').textContent=fmt(w)||w; $('#pr-fv').textContent=f;
+    const naive=w*f; // pushes per minute per user
+    // mitigation: subscribe-on-view (~20 visible of w) × debounce (÷ ~10 flaps)
+    const visible=Math.min(20,w); const mitigated= mit? Math.max(1,Math.round(visible*f/10)) : naive;
+    $('#pr-naive').textContent=fmt(naive)||naive; $('#pr-mitv').textContent=fmt(mitigated)||mitigated;
+    const factor=Math.round(naive/mitigated);
+    verdict('#pr-verdict','#pr-vtext', mit?'ok':'bad', mit? `Subscribe-on-view (${visible} visible, not ${fmt(w)||w}) + debounce cuts ${fmt(naive)||naive} → <b>${fmt(mitigated)||mitigated}</b> pushes/min — a ${factor}× reduction.` : `Naive: ${f} flaps × ${fmt(w)||w} watchers = <b>${fmt(naive)||naive}</b> pushes/min per user. Multiply across a fleet and presence dwarfs message traffic.`);
+  }
+  ['#pr-w','#pr-f'].forEach(id=>$(id).oninput=render); $('#pr-mit').onchange=render; render();
+};
+
+/* ══ 6 · OFFLINE SYNC ══ */
+PANELS[idxOf('6 · Offline sync')] = function(){
+  const svg=$('#s-svg'); const HEAD=200;
+  function render(synced){ const h=+$('#s-h').value; $('#s-hv').textContent=h+'h';
+    const gap=Math.round(h/72*160); const cursor=HEAD-gap; clear(svg);
+    // timeline bar
+    svg.appendChild(S('rect',{x:20,y:40,width:380,height:22,rx:6,fill:'var(--panel-2)',stroke:'var(--line)','stroke-width':1}));
+    // already-have region
+    const cursorX=20+ (cursor/HEAD)*380;
+    svg.appendChild(S('rect',{x:20,y:40,width:cursorX-20,height:22,rx:6,fill:'var(--accent-soft)'}));
+    if(synced) svg.appendChild(S('rect',{x:cursorX,y:40,width:20+380-cursorX-20,height:22,fill:'var(--good-soft)'}));
+    else svg.appendChild(S('rect',{x:cursorX,y:40,width:400-cursorX-0,height:22,fill:'var(--bad-soft)',opacity:.5}));
+    svg.appendChild(S('line',{x1:cursorX,y1:32,x2:cursorX,y2:70,stroke:'var(--accent)','stroke-width':2}));
+    svg.appendChild(S('text',{x:cursorX,y:28,'text-anchor':'middle','font-size':9,fill:'var(--accent)'},[txt('cursor (lastRead)')]));
+    svg.appendChild(S('text',{x:398,y:28,'text-anchor':'end','font-size':9,fill:'var(--muted)'},[txt('log head')]));
+    svg.appendChild(S('text',{x:24,y:88,'font-size':9,fill:'var(--muted)'},[txt('already synced')]));
+    svg.appendChild(S('text',{x:(cursorX+400)/2,y:88,'text-anchor':'middle','font-size':9,fill:synced?'var(--good)':'var(--bad)'},[txt(synced?'fetched: the delta only':'the gap = the queue')]));
+    return gap; }
+  $('#s-reconnect').onclick=()=>{ const gap=render(true); const msgs=Math.round(+$('#s-h').value*1.5);
+    verdict('#s-verdict','#s-vtext','ok',`Reconnected after ${$('#s-h').value}h → one query <code>seqNo &gt; lastRead</code> returned just the <b>${msgs} missed messages</b>, not a replayed queue. 3-second or 3-day gap: identical, idempotent.`); };
+  $('#s-h').oninput=()=>{ render(false); verdict('#s-verdict','#s-vtext','warn','The gap between cursor and head is the queue — press Reconnect to fetch just the delta.'); };
+  render(false); verdict('#s-verdict','#s-vtext','warn','The gap between cursor and head is the queue — press Reconnect to fetch just the delta.');
+};
+
+/* ══ 9 · BACKPRESSURE ══ */
+PANELS[idxOf('9 · Backpressure')] = function(){
+  const TICKS=24, CAP=40, OOM=200; let mode='un';
+  function setMode(m){ mode=m; $('#b-un').classList.toggle('sel',m==='un'); $('#b-bound').classList.toggle('sel',m==='bound'); }
+  $('#b-un').onclick=()=>setMode('un'); $('#b-bound').onclick=()=>setMode('bound');
+  $('#b-run').onclick=()=>{ let slow=0, healthy=10, dropped=false; const mem=[];
+    for(let t=0;t<TICKS;t++){ // producer adds 8 to slow (drains 1), healthy stays ~flat
+      if(!dropped){ slow += 8-1; if(mode==='bound' && slow>CAP){ slow=0; dropped=true; } }
+      const total = slow + healthy + (mode==='un' && slow>60? (slow-60)*0.5:0); mem.push(Math.min(OOM+20,total)); }
+    chartBars($('#b-chart'), mem, v=> v>=OOM?'var(--bad)': mode==='bound'?'var(--good)':'var(--accent)', i=> i%6===0?'t'+i:'');
+    // OOM line marker
+    const chart=$('#b-chart'); const line=document.createElement('div'); // skip; verdict conveys
+    if(mode==='un') verdict('#b-verdict','#b-vtext','bad',`Unbounded: the slow client's buffer grows every tick, node memory hits <b>OOM</b> and the healthy connections degrade too — one slow 2G client, whole-node outage.`);
+    else verdict('#b-verdict','#b-vtext','ok',`Bound + drop: buffer capped at ${CAP}; the slow consumer is <b>dropped</b> when it overflows → node memory stays flat, healthy connections untouched. It re-syncs from its cursor.`); };
+  setMode('un'); $('#b-run').click();
+};
+
+/* ══ 10 · DRAINING ══ */
+PANELS[idxOf('10 · Draining')] = function(){
+  const TICKS=20, TOTAL=2e6, CAP=250e3; let mode='naive';
+  function setMode(m){ mode=m; $('#d-naive').classList.toggle('sel',m==='naive'); $('#d-drain').classList.toggle('sel',m==='drain'); }
+  $('#d-naive').onclick=()=>setMode('naive'); $('#d-drain').onclick=()=>setMode('drain');
+  $('#d-run').onclick=()=>{ const jit=+$('#d-j').value; const rate=new Array(TICKS).fill(0);
+    if(mode==='naive'){ rate[0]=TOTAL; }
+    else { const w=Math.min(TICKS,jit); for(let t=0;t<w;t++) rate[t]=Math.round(TOTAL/w); }
+    chartBars($('#d-chart'), rate, v=> v>CAP?'var(--bad)':'var(--good)', i=> i%5===0?'t'+i:'');
+    const peak=Math.max(...rate);
+    if(mode==='naive') verdict('#d-verdict','#d-vtext','bad',`Naive: all <b>2M</b> reconnect in one tick — <b>${fmt(peak)}</b> vs ${fmt(CAP)} accept capacity → overload → registry storm + auth stampede.`);
+    else verdict('#d-verdict','#d-vtext', peak>CAP?'warn':'ok', `Drain + jitter over ${jit} ticks → peak <b>${fmt(peak)}/tick</b> ${peak>CAP?'(widen the jitter window to get under capacity)':'— a flat plateau under the '+fmt(CAP)+' accept capacity'}. Resume from a cursor so each reconnect is cheap.`); };
+  $('#d-j').oninput=()=>{ $('#d-jv').textContent=$('#d-j').value; if(mode==='drain') $('#d-run').click(); };
+  setMode('naive'); $('#d-run').click();
+};
+fromHash();
+</script>
+</body>
+</html>

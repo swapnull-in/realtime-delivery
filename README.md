@@ -41,6 +41,17 @@ and sync.
 | `npm run phase4` | **Delivery receipts** — the sent→delivered→read state machine; twice/out-of-order/never | receipts |
 | `npm run phase5` | **Presence** — heartbeats, the fan-out monster, flap damping | presence |
 | `npm run phase6` | **Offline sync** — fetch-since (not "replay the queue") + jittered reconnect | offline |
+| `npm run phase7` | **Push notifications** — the online↔push race, dedup, collapse keys, token pruning | offline delivery |
+| `npm run phase8` | **Group fan-out** — write vs read, the threshold hybrid, the celebrity problem | scaling groups |
+| `npm run phase9` | **Backpressure** — one slow 2G client OOMs a node; bound the buffer, drop the consumer | flow control |
+| `npm run phase10` | **The reconnect storm** — deploy 2M sockets: slow drain + jitter + headroom + cursor resume | recovery |
+| `npm run phase11` | **C10M capacity** — memory-bound derivation, event loop vs thread-per-conn, failover headroom | scaling connections |
+| `npm run phase12` | **E2E encryption** — X3DH + double ratchet (real `node:crypto`); the blind-relay architecture | encryption |
+
+> **Phases 7–12 fold in the Staff-level seams** the module says interviews turn on — push,
+> group fan-out at scale, the slow-consumer war story, the recovery storm, C10M capacity,
+> and E2E. They're all dependency-free and deterministic (phase 12 uses only `node:crypto`),
+> so unlike phases 2/6 and the chat app they need **no Redis**.
 
 ## Capstone: a live chat app
 
@@ -65,6 +76,32 @@ each other — that's hop 1 working across gateways.
   naively vs **500** with flap damping.
 - **Phase 6** — a 10,000-client reconnect storm spread from one lethal instant to
   ~2,000/sec across 5s of jittered backoff.
+- **Phase 8** — a 100k-member group on fan-out-on-write = **100k inbox writes** per
+  message (~50k writes/sec for one busy group); the crossover to a shared log is at
+  ~a few hundred members.
+- **Phase 9** — an unbounded send buffer climbs `23→46→…→207 💥 OOM`; bound+drop holds
+  node memory at **0/200** and the healthy connections are untouched.
+- **Phase 10** — a naive deploy spikes **200k reconnects/tick** (6.7× over capacity);
+  drain + jitter flattens it to a **~560/tick** plateau (2.1% of capacity).
+- **Phase 12** — Alice and Bob derive the **same** shared secret via real X25519 while
+  Bob is offline; stealing today's key can't decrypt past messages (forward secrecy).
+
+## Interactive Realtime Lab
+
+Every phase is also a live, **drawn** instrument in the browser — pick a workload and
+read off the transport, watch a message hop the registry + backplane to the right
+gateway, derive C10M node counts, scramble ordering with client clocks, cross the
+group-fan-out threshold, collapse push notifications, ratchet an E2E key, and flatten
+a reconnect storm.
+
+```bash
+npm run web        # serves web/index.html at http://localhost:8080 (no deps)
+```
+
+One self-contained static page (SVG visuals, self-hosted fonts), grouped by tier and
+deep-linkable. To host it on **Cloudflare Pages**: connect this repo in the dashboard
+with build output `web` (auto-deploys on push), or run `npx wrangler login` then
+`npm run deploy`.
 
 ## Project layout
 
@@ -77,7 +114,15 @@ src/
   phase4/  delivery-receipt state machine
   phase5/  presence + flap damping
   phase6/  offline sync + reconnect storms
+  phase7/  push notifications (online↔push race, collapse, token pruning)
+  phase8/  group fan-out — write vs read threshold
+  phase9/  backpressure — slow consumer, bound + drop
+  phase10/ connection draining + the reconnect storm
+  phase11/ C10M capacity derivation
+  phase12/ E2E encryption (X3DH + double ratchet, node:crypto)
   app/     the live chat gateway + browser UI
+web/
+  index.html  ·  serve.mjs   (the interactive Realtime Lab — npm run web)
 ```
 
 ## License

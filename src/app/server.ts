@@ -18,7 +18,7 @@
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { WebSocketServer, WebSocket } from "ws";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { log } from "../lib/log.ts";
 
 const PORT = Number(process.env.PORT ?? 5200);

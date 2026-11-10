@@ -1,6 +1,6 @@
 # Study Guide — Realtime Delivery ↔ Module 09 (Real-Time Systems)
 
-This repo is the runnable half of `Core Course/09-realtime-systems.md`: every phase is a small script that *proves* one claim the module makes on paper. Study by pairing — read the module section, run the phase (`npm run phaseN`), and watch the logged numbers confirm the insight, then drill yourself with the Drill panel in the web lab (`npm run web`). Finish by running the live chat capstone (`npm run chat`, needs Redis) in multiple tabs and narrating every hop out loud, interview-style.
+This repo is the runnable half of [`Core Course/09-realtime-systems.md`](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/09-realtime-systems.md): every phase is a small script that *proves* one claim the module makes on paper. Study by pairing — read the module section, run the phase (`npm run phaseN`), and watch the logged numbers confirm the insight, then drill yourself with the Drill panel in the web lab (`npm run web`). Finish by running the live chat capstone (`npm run chat`, needs Redis) in multiple tabs and narrating every hop out loud, interview-style.
 
 ## Phase → module mapping
 
@@ -22,8 +22,8 @@ This repo is the runnable half of `Core Course/09-realtime-systems.md`: every ph
 
 ## Go deeper
 
-- `Deep Dives/13-realtime-updates.md` — the transport and fan-out patterns generalized beyond chat (live dashboards, feeds, collaborative editing).
-- `Deep Dives/02-kafka.md` — the durable-log backplane underneath "persist before you fan out": partitions as ordering domains, consumer cursors.
-- `Core Course/18a-design-chat-social.md` — the full WhatsApp/Slack design problems that Module 09's building blocks assemble into.
-- `Core Course/36-design-live-streaming.md` — one-to-millions delivery where WebSocket fan-out gives way to HLS/CDN; the other end of the fan-out spectrum.
-- `Core Course/41-design-multiplayer-game.md` — when even TCP is too slow: unreliable datagrams, tick loops, and state sync under 50 ms budgets.
+- [`Deep Dives/13-realtime-updates.md`](https://github.com/swapnull-in/system-design/blob/main/Deep%20Dives/13-realtime-updates.md) — the transport and fan-out patterns generalized beyond chat (live dashboards, feeds, collaborative editing).
+- [`Deep Dives/02-kafka.md`](https://github.com/swapnull-in/system-design/blob/main/Deep%20Dives/02-kafka.md) — the durable-log backplane underneath "persist before you fan out": partitions as ordering domains, consumer cursors.
+- [`Core Course/18a-design-chat-social.md`](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/18a-design-chat-social.md) — the full WhatsApp/Slack design problems that Module 09's building blocks assemble into.
+- [`Core Course/36-design-live-streaming.md`](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/36-design-live-streaming.md) — one-to-millions delivery where WebSocket fan-out gives way to HLS/CDN; the other end of the fan-out spectrum.
+- [`Core Course/41-design-multiplayer-game.md`](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/41-design-multiplayer-game.md) — when even TCP is too slow: unreliable datagrams, tick loops, and state sync under 50 ms budgets.

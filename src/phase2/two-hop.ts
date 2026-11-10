@@ -25,7 +25,7 @@
  * shared Redis registry, then send messages across them.
  */
 
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { log } from "../lib/log.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
